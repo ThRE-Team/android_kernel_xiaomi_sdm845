@@ -2368,4 +2368,11 @@ config ASN1
 	  inform it as to what tags are to be expected in a stream and what
 	  functions to call on what tags.
 
+config LIMITLESS
+	bool "Enable Limitless Addon"
+	default n
+	help
+	  This option enables ThRE Team's Limitless Addon
+	  for dynamic kernel parameters.
+
 source "kernel/Kconfig.locks"

@@ -38,6 +38,11 @@ smb1355_0: qcom,smb1355@8 {
 		interrupt-parent = <&smb1355_0>;
 		status = "disabled";
 
+#ifdef CONFIG_LIMITLESS
+		qcom,fastchg-current-ma = <2800>;
+		qcom,hc-mode-current-max-ma = <2800>;
+#endif
+
 		io-channels = <&pmi8998_rradc 2>,
 			      <&pmi8998_rradc 12>;
 		io-channel-names = "charger_temp",
@@ -84,6 +89,11 @@ smb1355_1: qcom,smb1355@c {
 		#size-cells = <1>;
 		interrupt-parent = <&smb1355_1>;
 		status = "disabled";
+
+#ifdef CONFIG_LIMITLESS
+		qcom,fastchg-current-ma = <2800>;
+		qcom,hc-mode-current-max-ma = <2800>;
+#endif
 
 		io-channels = <&pmi8998_rradc 2>,
 			      <&pmi8998_rradc 12>;
