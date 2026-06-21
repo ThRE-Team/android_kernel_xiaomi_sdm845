@@ -42,6 +42,8 @@
 #include "internal.h"
 #include "mount.h"
 
+#include <linux/next_hide.h>
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/namei.h>
 
@@ -3703,6 +3705,12 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	int flags = op->lookup_flags;
 	struct file *filp;
 
+#ifdef CONFIG_LIMITLESS
+	if (suspicious_path(pathname)) {
+		return ERR_PTR(-ENOENT);
+	}
+#endif
+
 	set_nameidata(&nd, dfd, pathname);
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
 	if (unlikely(filp == ERR_PTR(-ECHILD)))
@@ -3903,6 +3911,19 @@ SYSCALL_DEFINE4(mknodat, int, dfd, const char __user *, filename, umode_t, mode,
 	int error;
 	unsigned int lookup_flags = 0;
 
+#ifdef CONFIG_LIMITLESS
+	struct filename* fname;
+	int status;
+
+	fname = getname_safe(filename);
+	status = suspicious_path(fname);
+	putname_safe(fname);
+
+	if (status) {
+		return -ENOENT;
+	}
+#endif
+
 	error = may_mknod(mode);
 	if (error)
 		return error;
@@ -3983,6 +4004,19 @@ SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
 	int error;
 	unsigned int lookup_flags = LOOKUP_DIRECTORY;
 
+#ifdef CONFIG_LIMITLESS
+	struct filename* fname;
+	int status;
+
+	fname = getname_safe(pathname);
+	status = suspicious_path(fname);
+	putname_safe(fname);
+
+	if (status) {
+		return -ENOENT;
+	}
+#endif
+
 retry:
 	dentry = user_path_create(dfd, pathname, &path, lookup_flags);
 	if (IS_ERR(dentry))
@@ -4060,11 +4094,19 @@ static long do_rmdir(int dfd, const char __user *pathname)
 	struct qstr last;
 	int type;
 	unsigned int lookup_flags = 0;
+
 retry:
 	name = user_path_parent(dfd, pathname,
 				&path, &last, &type, lookup_flags);
 	if (IS_ERR(name))
 		return PTR_ERR(name);
+
+#ifdef CONFIG_LIMITLESS
+	if (suspicious_path(name)) {
+		error = -ENOENT;
+		goto exit1;
+	}
+#endif
 
 	switch (type) {
 	case LAST_DOTDOT:
@@ -4202,6 +4244,13 @@ retry:
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 
+#ifdef CONFIG_LIMITLESS
+	if (suspicious_path(name)) {
+		error = -ENOENT;
+		goto exit1;
+	}
+#endif
+
 	error = -EISDIR;
 	if (type != LAST_NORM)
 		goto exit1;
@@ -4313,11 +4362,26 @@ SYSCALL_DEFINE3(symlinkat, const char __user *, oldname,
 	from = getname(oldname);
 	if (IS_ERR(from))
 		return PTR_ERR(from);
+
+#ifdef CONFIG_LIMITLESS
+	if (suspicious_path(from)) {
+		error = -ENOENT;
+		goto out_putname;
+	}
+#endif
+
 retry:
 	dentry = user_path_create(newdfd, newname, &path, lookup_flags);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out_putname;
+
+#ifdef CONFIG_LIMITLESS
+	if (suspicious_path(from)) {
+		error = -ENOENT;
+		goto out_putname;
+	}
+#endif
 
 	error = security_path_symlink(&path, dentry, from->name);
 	if (!error)
@@ -4461,11 +4525,26 @@ retry:
 	if (error)
 		return error;
 
+#ifdef CONFIG_LIMITLESS
+	if (is_suspicious_path(&old_path)) {
+		error = -ENOENT;
+		goto out;
+	}
+#endif
+
 	new_dentry = user_path_create(newdfd, newname, &new_path,
 					(how & LOOKUP_REVAL));
 	error = PTR_ERR(new_dentry);
 	if (IS_ERR(new_dentry))
 		goto out;
+
+#ifdef CONFIG_LIMITLESS
+	if (is_suspicious_path(&new_path)) {
+		done_path_create(&new_path, new_dentry);
+		error = -ENOENT;
+		goto out;
+	}
+#endif
 
 	error = -EXDEV;
 	if (old_path.mnt != new_path.mnt)
@@ -4725,12 +4804,26 @@ retry:
 		goto exit;
 	}
 
+#ifdef CONFIG_LIMITLESS
+	if (suspicious_path(from)) {
+		error = -ENOENT;
+		goto exit1;
+	}
+#endif
+
 	to = user_path_parent(newdfd, newname,
 				&new_path, &new_last, &new_type, lookup_flags);
 	if (IS_ERR(to)) {
 		error = PTR_ERR(to);
 		goto exit1;
 	}
+
+#ifdef CONFIG_LIMITLESS
+	if (suspicious_path(to)) {
+		error = -ENOENT;
+		goto exit2;
+	}
+#endif
 
 	error = -EXDEV;
 	if (old_path.mnt != new_path.mnt)
