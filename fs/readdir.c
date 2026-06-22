@@ -20,6 +20,7 @@
 #include <linux/unistd.h>
 
 #include <asm/uaccess.h>
+#include <linux/next_hide.h>
 
 int iterate_dir(struct file *file, struct dir_context *ctx)
 {
@@ -206,6 +207,12 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 	int reclen = ALIGN(offsetof(struct linux_dirent, d_name) + namlen + 2,
 		sizeof(long));
 
+#ifdef CONFIG_LIMITLESS
+	if (is_hidden_name(name, namlen)) {
+		return 0;
+	}
+#endif
+
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
 		return buf->error;
@@ -294,6 +301,12 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 		container_of(ctx, struct getdents_callback64, ctx);
 	int reclen = ALIGN(offsetof(struct linux_dirent64, d_name) + namlen + 1,
 		sizeof(u64));
+
+#ifdef CONFIG_LIMITLESS
+	if (is_hidden_name(name, namlen)) {
+		return 0;
+	}
+#endif
 
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
