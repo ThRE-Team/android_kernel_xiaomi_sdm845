@@ -28,6 +28,14 @@
 #include "infra/su_mount_ns.h"
 #include "hook/hook_manager.h"
 
+#ifndef FLAG_KSU_NO_NEW_PRIVS
+#define FLAG_KSU_NO_NEW_PRIVS (1 << 0)
+#endif
+
+#ifndef TIF_KSU_DISABLE_ESCAPE_WITH_ROOT
+#define TIF_KSU_DISABLE_ESCAPE_WITH_ROOT 31
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 static struct group_info root_groups = { .usage = REFCOUNT_INIT(2) };
 #else
@@ -152,6 +160,11 @@ int escape_with_root_profile(void)
 		pr_warn("Already root, don't escape!\n");
 		goto out_abort_creds;
 	}
+	
+	if (test_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT)) {
+        pr_warn("TIF_KSU_DISABLE_ESCAPE_WITH_ROOT found, don't escape!\n");
+        goto out_abort_creds;
+    }
 
     ksu_get_root_profile(cred->uid.val, &profile);
 
@@ -213,7 +226,15 @@ int escape_with_root_profile(void)
 	commit_creds(cred);
 
 	disable_seccomp();
-
+	
+	if (profile.flags & FLAG_KSU_NO_NEW_PRIVS) {
+    set_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT);
+}
+	
+	if (profile.flags & FLAG_KSU_NO_NEW_PRIVS) {
+        set_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT);
+    }
+    
 #ifdef KSU_KPROBES_HOOK
 	struct task_struct *p = current;
 	struct task_struct *t;

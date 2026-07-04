@@ -14,7 +14,7 @@ static const struct manager_identity allowed_managers[] = {
         .sig_size = 0x3e6
     },
     {
-        .package_name = "rtboob.dogzjy.tnwadk", // KernelSU-Next Spoof
+        .package_name = "vctsrt.cntgtj.uqfwgg", // KernelSU-Next Spoof
         .hash = "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7", 
         .sig_size = 0x3e6
     },

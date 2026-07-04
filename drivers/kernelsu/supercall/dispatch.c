@@ -4,7 +4,7 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
-
+#include <linux/thread_info.h>
 #include "uapi/supercall.h"
 #include "supercall/internal.h"
 #include "arch.h" // IWYU pragma: keep
@@ -34,18 +34,42 @@ static int do_grant_root(void __user *arg)
 
 	return 0;
 }
-
 static int do_get_info(void __user *arg)
 {
 	struct ksu_get_info_cmd cmd = {.version = KERNEL_SU_VERSION, .flags = 0};
 
 	if (ksuver_override) {
 		cmd.version = ksuver_override;
+	} // <-- DI SINI: Tadi kurang kurung tutup untuk if
+
+	if (is_manager()) {
+		cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
 	}
-	
+	if (ksu_late_loaded) {
+		cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
+	}
+#ifdef EXPECTED_SIZE2
+	cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;
+#endif
+	cmd.features = KSU_FEATURE_MAX;
+	cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
+
+	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+		pr_err("get_version: copy_to_user failed\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int do_get_info_legacy(void __user *arg)
+{
+	struct ksu_get_info_legacy_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
+
 #ifdef MODULE
 	cmd.flags |= KSU_GET_INFO_FLAG_LKM;
 #endif
+	// DI SINI: Tadi ada kurung tutup nyasar (}) dan duplikasi #ifdef MODULE, sudah dihapus
 
 	if (is_manager()) {
 		cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
@@ -62,6 +86,7 @@ static int do_get_info(void __user *arg)
 
 	return 0;
 }
+
 
 static int do_report_event(void __user *arg)
 {
@@ -738,6 +763,12 @@ out:
 	return err;
 }
 
+static int do_disable_escape_to_root(void __user *arg)
+{
+    set_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT);
+    return 0;
+}
+
 // IOCTL handlers mapping table
 // clang-format off
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
@@ -751,6 +782,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .cmd = KSU_IOCTL_GET_INFO,
         .name = "GET_INFO",
         .handler = do_get_info,
+        .perm_check = always_allow
+    },
+    {
+        .cmd = KSU_IOCTL_GET_INFO_LEGACY,
+        .name = "GET_INFO_LEGACY",
+        .handler = do_get_info_legacy,
         .perm_check = always_allow
     },
 	{
@@ -866,6 +903,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .name = "SET_INIT_PGRP",
         .handler = do_set_init_pgrp,
         .perm_check = only_root
+    },
+    { 
+        .cmd = KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT, 
+        .name = "DISABLE_ESCAPE_TO_ROOT", 
+        .handler = do_disable_escape_to_root, 
+        .perm_check = only_root 
     },
     {
         .cmd = KSU_IOCTL_GET_HOOK_MODE,
