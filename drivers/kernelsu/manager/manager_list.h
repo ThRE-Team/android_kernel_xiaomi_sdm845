@@ -19,16 +19,15 @@ static const struct manager_identity allowed_managers[] = {
         .sig_size = 0x3e6
     },
     {
-        .package_name = "id.next.manager", // Next Manager
+        .package_name = "id.i.bi", // Next Manager Spoof
         .hash = "1ab6077099505a4f5ff851732d5d965a4908af7f60c871f23b4b3a58e80e6cd3",
         .sig_size = 0x31c
     },
     {
-        .package_name = "id.i.bi", // Next Manager Spoof
+        .package_name = "id.next.manager", // Next Manager
         .hash = "1ab6077099505a4f5ff851732d5d965a4908af7f60c871f23b4b3a58e80e6cd3",
         .sig_size = 0x31c
     }
-    // linex Project
 };
 
 #endif

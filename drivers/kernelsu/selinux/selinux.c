@@ -24,7 +24,7 @@ static u32 cached_zygote_sid __read_mostly = 0;
 static u32 cached_init_sid __read_mostly = 0;
 u32 ksu_file_sid __read_mostly = 0;
 
-static int transive_to_domain(const char *domain, struct cred *cred)
+static int transive_to_domain(const char *domain, struct cred *cred, bool clear_exec_sid)
 {
     struct task_security_struct *tsec;
     u32 sid;
@@ -46,6 +46,9 @@ static int transive_to_domain(const char *domain, struct cred *cred)
         tsec->create_sid = 0;
         tsec->keycreate_sid = 0;
         tsec->sockcreate_sid = 0;
+		if (clear_exec_sid) {
+            tsec->exec_sid = 0;
+        }
     }
     return error;
 }
@@ -75,7 +78,7 @@ is_ksu_transition(const struct task_security_struct *old_tsec,
 
 void setup_selinux(const char *domain, struct cred *cred)
 {
-    if (transive_to_domain(domain, cred)) {
+    if (transive_to_domain(domain, cred, false)) {
         pr_err("transive domain failed.\n");
         return;
     }
@@ -83,7 +86,7 @@ void setup_selinux(const char *domain, struct cred *cred)
 
 void setup_ksu_cred(void)
 {
-    if (ksu_cred && transive_to_domain(KERNEL_SU_CONTEXT, ksu_cred)) {
+    if (ksu_cred && transive_to_domain(KERNEL_SU_CONTEXT, ksu_cred, false)) {
         pr_err("setup ksu cred failed.\n");
     }
 }
@@ -245,191 +248,114 @@ bool is_init(const struct cred *cred)
     return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
 }
 
-/* --------------- fake SELinux status page --------------- */
-
-#include <linux/fs.h>
-#include <linux/jump_label.h>
-#include <linux/kallsyms.h>
-#include <linux/mm.h>
-#include <linux/mutex.h>
-#include <linux/slab.h>
-#include "policy/feature.h"
-#include "include/ksu.h"
-
-static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
-static struct page *fake_status = NULL;
-static DEFINE_MUTEX(fake_status_init_mutex);
-static bool ksu_selinux_hide_status_enabled = true;
-
-static void initialize_fake_status(void)
+void escape_to_root_for_adb_root(void)
 {
-	if (READ_ONCE(fake_status))
-		return;
+    struct cred *cred = prepare_creds();
+    if (!cred) {
+        pr_err("Failed to prepare adbd's creds!\n");
+        return;
+    }
 
-	mutex_lock(&fake_status_init_mutex);
-	if (fake_status) /* double-check after lock */
-		goto out;
-
-	struct page *real_page = selinux_kernel_status_page();
-	if (!real_page) {
-		pr_warn("ksu_selinux_hide: status_page not exist\n");
-		goto out;
-	}
-
-	struct selinux_kernel_status *status = page_address(real_page);
-	if (!status->enforcing && !ksu_late_loaded) {
-		pr_warn("ksu_selinux_hide: skip not enforcing\n");
-		goto out;
-	}
-
-	struct page *new_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
-	if (!new_page) {
-		pr_err("ksu_selinux_hide: failed to allocate fake status page\n");
-		goto out;
-	}
-
-	struct selinux_kernel_status *new_status = page_address(new_page);
-	memcpy(new_status, status, sizeof(*status));
-	if (ksu_late_loaded && !new_status->enforcing) {
-		/*
-		 * In late_load mode we may be loaded after setenforce 0.
-		 * Adjust sequence to look like a normal enforcing boot.
-		 * Assumes setenforce 0 was called exactly once.
-		 */
-		new_status->enforcing = 1;
-		new_status->sequence = 4;
-	}
-
-	WRITE_ONCE(fake_status, new_page);
-	pr_info("ksu_selinux_hide: fake status ready: sequence=%d policyload=%d enforcing=%d\n",
-		new_status->sequence, new_status->policyload,
-		new_status->enforcing);
-out:
-	mutex_unlock(&fake_status_init_mutex);
+    if (transive_to_domain(KERNEL_SU_CONTEXT, cred, true)) {
+        pr_err("transive domain failed.\n");
+        abort_creds(cred);
+        return;
+    }
+    commit_creds(cred);
 }
 
-typedef int (*sel_open_handle_status_fn)(struct inode *inode,
-					 struct file *filp);
-static sel_open_handle_status_fn orig_sel_open_handle_status = NULL;
+#ifdef CONFIG_KSU_SUSFS
+#define KERNEL_INIT_DOMAIN "u:r:init:s0"
+#define KERNEL_ZYGOTE_DOMAIN "u:r:zygote:s0"
+#define KERNEL_PRIV_APP_DOMAIN "u:r:priv_app:s0:c512,c768"
 
-static int my_sel_open_handle_status(struct inode *inode, struct file *filp)
+u32 susfs_ksu_sid = 0;
+u32 susfs_init_sid = 0;
+u32 susfs_zygote_sid = 0;
+u32 susfs_priv_app_sid = 0;
+
+static inline void susfs_set_sid(const char *secctx_name, u32 *out_sid)
 {
-	if (likely(current_uid().val >= 10000 &&
-		   ksu_selinux_hide_status_enabled)) {
-		struct page *data = READ_ONCE(fake_status);
-		if (data) {
-			filp->private_data = page_address(data);
-			return 0;
-		}
-	}
+    int err;
+    
+    if (!secctx_name || !out_sid) {
+        pr_err("secctx_name || out_sid is NULL\n");
+        return;
+    }
 
-	int ret = orig_sel_open_handle_status(inode, filp);
-	if (static_branch_unlikely(&fake_status_initialize_key) && !ret &&
-	    !fake_status) {
-		initialize_fake_status();
-	}
-	return ret;
+    err = security_secctx_to_secid(secctx_name, strlen(secctx_name),
+                       out_sid);
+    if (err) {
+        pr_err("failed setting sid for '%s', err: %d\n", secctx_name, err);
+        return;
+    }
+    pr_info("sid '%u' is set for secctx_name '%s'\n", *out_sid, secctx_name);
 }
 
-static void hook_selinux_status_open(void)
-{
-	if (orig_sel_open_handle_status)
-		return;
+bool susfs_is_sid_equal(const struct cred *cred, u32 sid2) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
+    const struct task_security_struct *tsec = selinux_cred(cred);
+#else
+    const struct cred_security_struct *tsec = selinux_cred(cred);
+#endif
 
-	struct file_operations *ops =
-		(struct file_operations *)kallsyms_lookup_name(
-			"sel_handle_status_ops");
-	if (!ops) {
-		pr_err("ksu_selinux_hide: sel_handle_status_ops not found, fake status disabled\n");
-		return;
-	}
-
-	orig_sel_open_handle_status = ops->open;
-	ops->open = my_sel_open_handle_status;
-	pr_info("ksu_selinux_hide: hooked sel_handle_status_ops->open\n");
+    if (!tsec) {
+        return false;
+    }
+    return tsec->sid == sid2;
 }
 
-static void unhook_selinux_status_open(void)
+u32 susfs_get_sid_from_name(const char *secctx_name)
 {
-	if (!orig_sel_open_handle_status)
-		return;
-
-	struct file_operations *ops =
-		(struct file_operations *)kallsyms_lookup_name(
-			"sel_handle_status_ops");
-	if (!ops) {
-		pr_err("ksu_selinux_hide: sel_handle_status_ops not found on unhook\n");
-		return;
-	}
-
-	ops->open = orig_sel_open_handle_status;
-	orig_sel_open_handle_status = NULL;
-	pr_info("ksu_selinux_hide: unhooked sel_handle_status_ops->open\n");
+    u32 out_sid = 0;
+    int err;
+    
+    if (!secctx_name) {
+        pr_err("secctx_name is NULL\n");
+        return 0;
+    }
+    err = security_secctx_to_secid(secctx_name, strlen(secctx_name),
+                       &out_sid);
+    if (err) {
+        pr_err("failed getting sid from secctx_name: %s, err: %d\n", secctx_name, err);
+        return 0;
+    }
+    return out_sid;
 }
 
-static int selinux_hide_status_feature_get(u64 *value)
-{
-	*value = ksu_selinux_hide_status_enabled ? 1 : 0;
-	return 0;
+u32 susfs_get_current_sid(void) {
+    return current_sid();
 }
 
-static int selinux_hide_status_feature_set(u64 value)
+void susfs_set_zygote_sid(void)
 {
-	bool enable = !!value;
-	if (enable == ksu_selinux_hide_status_enabled) {
-		pr_info("ksu_selinux_hide: no need to change\n");
-		return 0;
-	}
-	ksu_selinux_hide_status_enabled = enable;
-	pr_info("ksu_selinux_hide: set to %d\n", enable);
-	return 0;
+    susfs_set_sid(KERNEL_ZYGOTE_DOMAIN, &susfs_zygote_sid);
 }
 
-static const struct ksu_feature_handler selinux_hide_status_handler = {
-	.feature_id = KSU_FEATURE_SELINUX_HIDE_STATUS,
-	.name = "selinux_hide_status",
-	.get_handler = selinux_hide_status_feature_get,
-	.set_handler = selinux_hide_status_feature_set,
-};
-
-void ksu_selinux_hide_status_handle_second_stage(void)
-{
-	initialize_fake_status();
-	if (READ_ONCE(fake_status)) {
-		static_key_disable(&fake_status_initialize_key.key);
-	} else {
-		pr_warn("ksu_selinux_hide: fake status needs late initialization\n");
-	}
+bool susfs_is_current_zygote_domain(void) {
+    return unlikely(current_sid() == susfs_zygote_sid);
 }
 
-void ksu_selinux_hide_status_handle_post_fs_data(void)
+void susfs_set_ksu_sid(void)
 {
-	static_key_disable(&fake_status_initialize_key.key);
-	if (!READ_ONCE(fake_status))
-		pr_err("ksu_selinux_hide: fake status not initialized after post-fs-data!\n");
+    susfs_set_sid(KERNEL_SU_CONTEXT, &susfs_ksu_sid);
 }
 
-void __init ksu_selinux_hide_status_init(void)
-{
-	if (ksu_register_feature_handler(&selinux_hide_status_handler))
-		pr_err("ksu_selinux_hide: failed to register feature handler\n");
-
-	if (ksu_late_loaded) {
-		initialize_fake_status();
-	} else {
-		static_key_enable(&fake_status_initialize_key.key);
-	}
-	hook_selinux_status_open();
+bool susfs_is_current_ksu_domain(void) {
+    return unlikely(current_sid() == susfs_ksu_sid);
 }
 
-void __exit ksu_selinux_hide_status_exit(void)
+void susfs_set_init_sid(void)
 {
-	ksu_unregister_feature_handler(KSU_FEATURE_SELINUX_HIDE_STATUS);
-	unhook_selinux_status_open();
-	mutex_lock(&fake_status_init_mutex);
-	if (fake_status) {
-		__free_page(fake_status);
-		fake_status = NULL;
-	}
-	mutex_unlock(&fake_status_init_mutex);
+    susfs_set_sid(KERNEL_INIT_DOMAIN, &susfs_init_sid);
 }
+
+bool susfs_is_current_init_domain(void) {
+    return unlikely(current_sid() == susfs_init_sid);
+}
+
+void susfs_set_priv_app_sid(void)
+{
+    susfs_set_sid(KERNEL_PRIV_APP_DOMAIN, &susfs_priv_app_sid);
+}
+#endif // #ifdef CONFIG_KSU_SUSFS
