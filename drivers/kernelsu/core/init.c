@@ -6,6 +6,10 @@
 #include <linux/sched.h>
 #include <linux/workqueue.h>
 
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 #include "policy/allowlist.h"
 #include "policy/app_profile.h"
 #include "policy/feature.h"
@@ -126,6 +130,11 @@ int __init kernelsu_init(void)
 		ksu_syscall_hook_manager_init();
 
 		ksu_throne_tracker_init();
+
+#ifdef CONFIG_KSU_SUSFS
+		susfs_init();
+#endif
+
 		ksu_observer_init();
 		ksu_file_wrapper_init();
 
@@ -149,6 +158,10 @@ int __init kernelsu_init(void)
 		ksu_allowlist_init();
 
 		ksu_throne_tracker_init();
+
+#ifdef CONFIG_KSU_SUSFS
+		susfs_init();
+#endif
 
 		ksu_ksud_init();
 
