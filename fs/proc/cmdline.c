@@ -2,6 +2,7 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/string.h>
 #ifdef CONFIG_INITRAMFS_IGNORE_SKIP_FLAG
 #include <asm/setup.h>
 #endif
@@ -9,6 +10,23 @@
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
 extern struct static_key_false susfs_is_fake_cmdline_or_bootconfig_buffer_set;
 extern void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
+#endif
+
+#ifdef CONFIG_LIMITLESS
+static void replace_param(char *str, const char *old_str, const char *new_str) {
+    char *pos = strstr(str, old_str);
+    if (pos) {
+        memcpy(pos, new_str, strlen(new_str));
+    }
+}
+
+/* Limitless Loader */
+static void spoof_bootloader_params(char *buf) {
+    replace_param(buf, "androidboot.verifiedbootstate=orange", "androidboot.verifiedbootstate=green ");
+    replace_param(buf, "androidboot.verifiedbootstate=yellow", "androidboot.verifiedbootstate=green ");
+    replace_param(buf, "androidboot.flash.locked=0", "androidboot.flash.locked=1");
+    replace_param(buf, "androidboot.vbmeta.device_state=unlocked", "androidboot.vbmeta.device_state=locked  ");
+}
 #endif
 
 #ifdef CONFIG_INITRAMFS_IGNORE_SKIP_FLAG
@@ -24,10 +42,12 @@ static void proc_command_line_init(void) {
 	strcpy(proc_command_line, saved_command_line);
 
 	offset_addr = strstr(proc_command_line, INITRAMFS_STR_FIND);
-	if (!offset_addr)
-		return;
+	if (offset_addr)
+		memcpy(offset_addr, INITRAMFS_STR_REPLACE, INITRAMFS_STR_LEN);
 
-	memcpy(offset_addr, INITRAMFS_STR_REPLACE, INITRAMFS_STR_LEN);
+#ifdef CONFIG_LIMITLESS
+	spoof_bootloader_params(proc_command_line);
+#endif
 }
 #endif
 
@@ -40,10 +60,18 @@ static int cmdline_proc_show(struct seq_file *m, void *v)
         return 0;
     }
 #endif
+
 #ifdef CONFIG_INITRAMFS_IGNORE_SKIP_FLAG
 	seq_printf(m, "%s\n", proc_command_line);
 #else
+#ifdef CONFIG_LIMITLESS
+	char buf[COMMAND_LINE_SIZE];
+	strlcpy(buf, saved_command_line, sizeof(buf));
+	spoof_bootloader_params(buf);
+	seq_printf(m, "%s\n", buf);
+#else
 	seq_printf(m, "%s\n", saved_command_line);
+#endif
 #endif
 	return 0;
 }
