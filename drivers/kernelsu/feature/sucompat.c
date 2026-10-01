@@ -32,6 +32,7 @@
 #include "sucompat.h"
 #include "policy/app_profile.h"
 #include "selinux/selinux.h"
+#include "supercall/supercall.h"
 #include "sulog/event.h"
 
 #define SU_PATH "/system/bin/su"
@@ -152,6 +153,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr, 
 	char path[sizeof(su) + 1];
 	long ret;
 	unsigned long addr;
+	int su_fd = -1;
 
 	if (unlikely(!filename_user))
 		goto do_orig_execve;
@@ -191,6 +193,10 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr, 
 		pr_err("escape_with_root_profile failed: %ld\n", ret);
 		ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
 		goto do_orig_execve;
+	}
+	su_fd = ksu_install_su_fd();
+	if (su_fd < 0) {
+		pr_warn("install su session fd failed: %d\n", su_fd);
 	}
 	if (preempt_count() > 0) {
 		*filename_user = ksud_user_path();

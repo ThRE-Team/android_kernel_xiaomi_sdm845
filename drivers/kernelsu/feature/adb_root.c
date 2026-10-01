@@ -16,6 +16,11 @@
 
 #include "klog.h" // IWYU pragma: keep
 
+/* Fix compiler error: ALIGN_DOWN implicit declaration on kernel 4.4 punya e pak loli. hahaha */
+#ifndef ALIGN_DOWN
+#define ALIGN_DOWN(x, a) ((x) & ~((typeof(x))(a) - 1))
+#endif
+
 DEFINE_STATIC_KEY_FALSE(ksu_adb_root);
 
 static long is_exec_adbd(struct pt_regs *regs)
