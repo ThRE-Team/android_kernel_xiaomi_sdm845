@@ -18,6 +18,12 @@
 #include "selinux/selinux.h"
 #include "feature/selinux_hide.h"
 
+/* Fix __nocfi missing on 4.4 kernels */
+#include <linux/security.h>
+#ifndef __nocfi
+#define __nocfi
+#endif
+
 static struct page *fake_status = NULL;
 static DEFINE_MUTEX(fake_status_init_mutex);
 
@@ -32,9 +38,14 @@ static u32 priv_app_sid __read_mostly = 0;
 
 static int ksu_selinux_get_sids(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+	int err1 = security_context_to_sid("u:r:ksu:s0", strlen("u:r:ksu:s0"), &ksu_sid, GFP_KERNEL);
+	int err2 = security_context_to_sid("u:r:priv_app:s0:c512,c768", strlen("u:r:priv_app:s0:c512,c768"), &priv_app_sid, GFP_KERNEL);
+#else
 	int err1 = security_secctx_to_secid("u:r:ksu:s0", strlen("u:r:ksu:s0"), &ksu_sid);
 	int err2 = security_secctx_to_secid("u:r:priv_app:s0:c512,c768",
 					     strlen("u:r:priv_app:s0:c512,c768"), &priv_app_sid);
+#endif
 	if (!err1) pr_info("ksu_selinux_hide: ksu_sid=%u\n", ksu_sid);
 	if (!err2) pr_info("ksu_selinux_hide: priv_app_sid=%u\n", priv_app_sid);
 	return (!ksu_sid || !priv_app_sid) ? -1 : 0;

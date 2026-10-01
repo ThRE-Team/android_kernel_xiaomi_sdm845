@@ -12,6 +12,10 @@
 #define EVENT_BOOT_COMPLETED 2
 #define EVENT_MODULE_MOUNTED 3
 
+#ifdef MODULE
+extern bool ksu_bundled;
+#endif
+
 static inline int startswith(char *s, char *prefix)
 {
 	return strncmp(s, prefix, strlen(prefix));
