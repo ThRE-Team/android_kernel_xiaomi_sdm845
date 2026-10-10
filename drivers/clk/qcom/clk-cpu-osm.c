@@ -553,6 +553,8 @@ static int set_oc_level(const char *val, const struct kernel_param *kp)
 
 	if (c && c->osm_table) {
 		switch (level) {
+			case 99: oc_lval = 0x9a; break;
+			case 24: oc_lval = 0x99; break;
 			case 4: oc_lval = 0x98; break;
 			case 3: oc_lval = 0x96; break;
 			case 2: oc_lval = 0x94; break;
