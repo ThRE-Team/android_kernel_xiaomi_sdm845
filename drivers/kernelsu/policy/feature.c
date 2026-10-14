@@ -7,6 +7,16 @@ static const struct ksu_feature_handler *feature_handlers[KSU_FEATURE_MAX];
 
 static DEFINE_MUTEX(feature_mutex);
 
+static const char *const feature_names[KSU_FEATURE_MAX] = {
+	[KSU_FEATURE_SU_COMPAT] = "su_compat",
+	[KSU_FEATURE_KERNEL_UMOUNT] = "kernel_umount",
+	[KSU_FEATURE_SULOG] = "sulog",
+	[KSU_FEATURE_ADB_ROOT] = "adb_root",
+	[KSU_FEATURE_SELINUX_HIDE_STATUS] = "selinux_hide",
+	[KSU_FEATURE_SHELL_SU_ADB_ONLY] = "shell_su_adb_only",
+	[KSU_FEATURE_AVC_SPOOF] = "avc_spoof",
+};
+
 int ksu_register_feature_handler(const struct ksu_feature_handler *handler)
 {
 	if (!handler) {
