@@ -1,8 +1,0 @@
-# Kconfig for Limitless (NoMount)
-
-config LIMITLESS
-	bool "Limitless Subsystem (NoMount & Hide)"
-	default y
-	help
-	  Enable Limitless features including path redirection, virtual file injection,
-	  and stealth hiding functionality without mounting filesystems.
