@@ -134,5 +134,4 @@ obj-$(CONFIG_CEPH_FS)		+= ceph/
 obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
 obj-$(CONFIG_LIMITLESS) += next_hide.o
-obj-$(CONFIG_LIMITLESS) += nomount/
 obj-$(CONFIG_KSU_SUSFS) += susfs.o
