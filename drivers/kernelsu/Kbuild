@@ -106,7 +106,9 @@ $(info --> Next tag: $(KSU_VERSION_TAG))
 ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG)\"
 else
 # $(warning "KSU_VERSION_TAG not defined! It is better to make Next a git submodule!")
-KSU_VERSION_TAG_FALLBACK := v3.4.2
+
+KSU_VERSION_TAG_FALLBACK := v3.4.2-enjoy
+
 $(info --> Next tag fallback: $(KSU_VERSION_TAG_FALLBACK))
 ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG_FALLBACK)\"
 endif
@@ -309,5 +311,14 @@ ccflags-y += -DUSE_MULTI_MANAGER_LIST
 
 ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
+
+## For susfs stuff ##
+ifeq ($(shell test -e $(srctree)/fs/susfs.c; echo $$?),0)
+$(eval SUSFS_VERSION=$(shell cat $(srctree)/include/linux/susfs.h | grep -E '^#define SUSFS_VERSION' | cut -d' ' -f3 | sed 's/"//g'))
+$(info --> Next SUSFS: $(SUSFS_VERSION))
+else
+$(info -- You have not integrated susfs in your kernel yet.)
+$(info -- Read: https://gitlab.com/simonpunk/susfs4ksu)
+endif
 
 # Keep a new line here!! Because someone may append config
