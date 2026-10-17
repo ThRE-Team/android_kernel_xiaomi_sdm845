@@ -4,6 +4,7 @@ kernelsu-objs += compat/kernel_compat.o
 kernelsu-objs += feature/kernel_umount.o
 kernelsu-objs += feature/sulog.o
 kernelsu-objs += feature/sucompat.o
+kernelsu-objs += feature/shell_su_adb_only.o
 
 kernelsu-objs += hook/hook_manager.o
 kernelsu-objs += hook/lsm_hooks.o
@@ -41,7 +42,6 @@ kernelsu-objs += supercall/supercall.o
 
 kernelsu-objs += feature/adb_root.o
 kernelsu-objs += feature/selinux_hide.o
-kernelsu-objs += feature/shell_su_adb_only.o
 
 ifdef KBUILD_EXTMOD
 ifeq ($(CONFIG_KSU_DISABLE_MANAGER),y)
@@ -82,77 +82,96 @@ $(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(LPATH) git fetch --unshallow 
 KSU_GIT_VERSION := $(shell cd $(GIT_ROOT) && $(LPATH) git rev-list --count HEAD 2>/dev/null)
 KSU_GIT_TAG := $(shell cd $(GIT_ROOT) && $(LPATH) git describe --tags --abbrev=0 2>/dev/null)
 KSU_GIT_VERSION_VALID := 1
-$(info --> Next Git repo detected at: $(GIT_ROOT))
+$(info -- KernelSU-Next Git repo detected at: $(GIT_ROOT))
 endif
 endif
 
 # Calculate version if git version is available
 ifdef KSU_GIT_VERSION_VALID
-# ksu_version: major * 30000 + git version for historical reasons
-$(eval KSU_VERSION=$(shell expr 30000 + $(KSU_GIT_VERSION) + 361))
-$(info --> Next version: $(KSU_VERSION))
-ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
+$(eval KSU_VERSION=$(shell expr 30000 + $(KSU_GIT_VERSION) + 289))
+$(info -- KernelSU-Next version: $(KSU_VERSION))
 else
 # If there is no .git directory, use default version
-# $(warning "KSU_GIT_VERSION not defined! It is better to make Next a git repository!")
-KSU_VERSION_FALLBACK := 33355
-$(info --> Next version fallback: $(KSU_VERSION_FALLBACK))
-ccflags-y += -DKSU_VERSION=$(KSU_VERSION_FALLBACK)
+$(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU-Next a git repository!")
+KSU_VERSION_FALLBACK := 33388
+$(info -- KernelSU-Next version fallback: $(KSU_VERSION_FALLBACK))
+KSU_VERSION := $(KSU_VERSION_FALLBACK)
 endif
+
+# Allow integrators to pin the reported version (e.g. when backporting
+# onto release branches where the commit count does not match releases)
+# legacy: keep version derived from commit count, with a +289 offset so
+# the reported ksuver stays in line with the manager versionCode
+# (maintainer preference, #1549)
+ifdef KSU_VERSION_OVERRIDE
+KSU_VERSION := $(KSU_VERSION_OVERRIDE)
+$(info -- KernelSU-Next version override: $(KSU_VERSION))
+endif
+ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 
 ifdef KSU_GIT_VERSION_VALID
 $(eval KSU_VERSION_TAG=$(KSU_GIT_TAG))
-$(info --> Next tag: $(KSU_VERSION_TAG))
-ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG)\"
 else
-# $(warning "KSU_VERSION_TAG not defined! It is better to make Next a git submodule!")
-
-KSU_VERSION_TAG_FALLBACK := v3.4.2-enjoy
-
-$(info --> Next tag fallback: $(KSU_VERSION_TAG_FALLBACK))
-ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG_FALLBACK)\"
+$(warning "KSU_VERSION_TAG not defined! It is better to make KernelSU-Next a git submodule!")
+KSU_VERSION_TAG_FALLBACK := v3.4.2
+KSU_VERSION_TAG=$(KSU_VERSION_TAG_FALLBACK)
 endif
 
+ifdef KSU_VERSION_TAG_OVERRIDE
+KSU_VERSION_TAG := $(KSU_VERSION_TAG_OVERRIDE)
+endif
+
+$(info -- KernelSU-Next tag: $(KSU_VERSION_TAG))
+ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG)\"
+
 ifndef KSU_NEXT_MANAGER_SIZE
-KSU_NEXT_MANAGER_SIZE := 0x31c
+KSU_NEXT_MANAGER_SIZE := 0x3e6
 endif
 
 ifndef KSU_NEXT_MANAGER_HASH
-KSU_NEXT_MANAGER_HASH := 1ab6077099505a4f5ff851732d5d965a4908af7f60c871f23b4b3a58e80e6cd3
+KSU_NEXT_MANAGER_HASH := 79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7
 endif
 
-ccflags-y += -DKSU_MAX_PACKAGE_NAME=256
+KSU_MANAGER_PACKAGE ?= com.rifsxd.ksunext
 
-ifndef KSU_MANAGER_PACKAGE
-KSU_MANAGER_PACKAGE := id.next.manager
-endif
+ifdef KSU_MANAGER_PACKAGE
 ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
-$(info --> Next Manager package name: $(KSU_MANAGER_PACKAGE))
+$(info -- KernelSU-Next Manager package name: $(KSU_MANAGER_PACKAGE))
+endif
 
-$(info --> Next Manager signature size: $(KSU_NEXT_MANAGER_SIZE))
-$(info --> Next Manager signature hash: $(KSU_NEXT_MANAGER_HASH))
+$(info -- KernelSU-Next Manager signature size: $(KSU_NEXT_MANAGER_SIZE))
+$(info -- KernelSU-Next Manager signature hash: $(KSU_NEXT_MANAGER_HASH))
 
-# RKSU: checks for available hook
+# KSU: checks for available hook
 ## Logic flipped for HAVE_KSU_HOOK: 0 is success, 1 is failure
 HAVE_KSU_HOOK ?= 1
 
 # Checks hooks state
 ifeq ($(CONFIG_KSU_KPROBES_HOOK), y)
-$(info --> Next: Hook mode: Kprobes)
+$(info -- KernelSU-Next: Hook mode: Kprobes)
 ccflags-y += -DKSU_KPROBES_HOOK
 # Let's make it 0, so it would pass.
 HAVE_KSU_HOOK := 0
 endif
 
+ifeq ($(CONFIG_KSU_SYSCALL_TABLE_HOOK), y)
+$(info -- KernelSU-Next: Hook mode: Syscall table patching)
+ccflags-y += -DKSU_SYSCALL_TABLE_HOOK
+HAVE_KSU_HOOK := 0
+kernelsu-objs += hook/patch_memory.o
+kernelsu-objs += hook/syscall_table_hook.o
+kernelsu-objs += infra/symbol_resolver.o
+endif
+
 ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
 HAVE_KSU_HOOK := $(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c && echo 0 || echo 1)
 ifeq ($(HAVE_KSU_HOOK),0)
-$(info --> Next: Hook mode: Manual)
+$(info -- KernelSU-Next: Hook mode: Manual)
 endif
 endif
 
 ifneq ($(HAVE_KSU_HOOK),0)
-$(error --> Next: No hooks were defined, please integrate manual hooks in your kernel!)
+$(error -- KernelSU-Next: No hooks were defined, please integrate manual hooks in your kernel!)
 endif
 
 # some backports
@@ -214,15 +233,13 @@ $(shell sed -i 's/return inode->i_security/return selinux_inode(inode)/g' $(srct
 $(shell sed -i 's/\bisec = inode->i_security;/isec = selinux_inode(inode);/' $(srctree)/security/selinux/hooks.c)
 endif
 
-ifneq ($(shell grep -q "selinux_cred" $(srctree)/security/selinux/hooks.c; echo $$?),0)
+ifneq ($(shell grep -Eq 'selinux_cred\(.*\)' $(srctree)/security/selinux/hooks.c; echo $$?),0)
 $(info -- KSU_NEXT: patching selinux/hooks.c for selinux_cred)
 $(shell sed -i 's/tsec = cred->security;/tsec = selinux_cred(cred);/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/const struct task_security_struct \*tsec = cred->security;/const struct task_security_struct *tsec = selinux_cred(cred);/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/const struct task_security_struct \*tsec = current_security();/const struct task_security_struct *tsec = selinux_cred(current_cred());/g' $(srctree)/security/selinux/hooks.c)
-$(shell sed -i 's/rc = selinux_determine_inode_label(current_security())/rc = selinux_determine_inode_label(selinux_cred(current_cred()))/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/old_tsec = current_security();/old_tsec = selinux_cred(current_cred());/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/new_tsec = bprm->cred->security;/new_tsec = selinux_cred(bprm->cred);/g' $(srctree)/security/selinux/hooks.c)
-$(shell sed -i 's/rc = selinux_determine_inode_label(old->security)/rc = selinux_determine_inode_label(selinux_cred(old))/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/tsec = new->security;/tsec = selinux_cred(new);/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/tsec = new_creds->security;/tsec = selinux_cred(new_creds);/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/old_tsec = old->security;/old_tsec = selinux_cred(old);/g' $(srctree)/security/selinux/hooks.c)
@@ -230,6 +247,8 @@ $(shell sed -i 's/const struct task_security_struct \*old_tsec = old->security;/
 $(shell sed -i 's/struct task_security_struct \*tsec = new->security;/struct task_security_struct *tsec = selinux_cred(new);/g' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/__tsec = current_security();/__tsec = selinux_cred(current_cred());/' $(srctree)/security/selinux/hooks.c)
 $(shell sed -i 's/__tsec = __task_cred(p)->security;/__tsec = selinux_cred(__task_cred(p));/' $(srctree)/security/selinux/hooks.c)
+$(shell sed -i 's/current_security()/selinux_cred(current_cred())/g' $(srctree)/security/selinux/hooks.c)
+$(shell sed -i 's/old->security/selinux_cred(old)/g' $(srctree)/security/selinux/hooks.c)
 endif
 
 ifneq ($(shell grep -q "selinux_inode(inode)" $(srctree)/security/selinux/selinuxfs.c; echo $$?),0)
@@ -307,18 +326,10 @@ ifeq ($(shell grep -q "SEC_SELINUX_PORTING_COMMON" $(srctree)/security/selinux/a
 ccflags-y += -DSAMSUNG_SELINUX_PORTING
 endif
 
-ccflags-y += -DUSE_MULTI_MANAGER_LIST
+ccflags-y += -DEXPECTED_MANAGER_SIZE=$(KSU_NEXT_MANAGER_SIZE)
+ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
 
 ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
-
-## For susfs stuff ##
-ifeq ($(shell test -e $(srctree)/fs/susfs.c; echo $$?),0)
-$(eval SUSFS_VERSION=$(shell cat $(srctree)/include/linux/susfs.h | grep -E '^#define SUSFS_VERSION' | cut -d' ' -f3 | sed 's/"//g'))
-$(info --> Next SUSFS: $(SUSFS_VERSION))
-else
-$(info -- You have not integrated susfs in your kernel yet.)
-$(info -- Read: https://gitlab.com/simonpunk/susfs4ksu)
-endif
 
 # Keep a new line here!! Because someone may append config

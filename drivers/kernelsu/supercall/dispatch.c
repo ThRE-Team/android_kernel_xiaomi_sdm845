@@ -48,15 +48,18 @@ static int do_get_info(void __user *arg)
 		cmd.version = ksuver_override;
 	}
 
+#ifdef MODULE
+    cmd.flags |= KSU_GET_INFO_FLAG_LKM;
+    if (ksu_bundled) {
+        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;
+    }
+#endif
     if (is_manager()) {
         cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
     }
     if (ksu_late_loaded) {
         cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
     }
-#ifdef EXPECTED_SIZE2
-    cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;
-#endif
     cmd.features = KSU_FEATURE_MAX;
     cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
 
@@ -346,24 +349,30 @@ static int do_get_app_profile(void __user *arg)
 #ifdef CONFIG_KSU_DISABLE_POLICY
     return -EOPNOTSUPP;
 #endif
+    uid_t uid;
+    struct app_profile *profile;
+    int ret = 0;
 
-	struct ksu_get_app_profile_cmd cmd;
+    if (copy_from_user(&uid, (char __user *)arg + offsetof(struct ksu_get_app_profile_cmd, profile.curr_uid),
+                       sizeof(uid_t))) {
+        pr_err("get_app_profile: copy_from_user failed\n");
+        return -EFAULT;
+    }
 
-	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
-		pr_err("get_app_profile: copy_from_user failed\n");
-		return -EFAULT;
-	}
-
-	if (!ksu_get_app_profile(&cmd.profile)) {
-		return -ENOENT;
-	}
-
-	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
-		pr_err("get_app_profile: copy_to_user failed\n");
-		return -EFAULT;
-	}
-
-	return 0;
+    rcu_read_lock();
+    profile = ksu_get_app_profile(uid);
+    rcu_read_unlock();
+    if (!profile) {
+        ret = -ENOENT;
+    } else {
+        if (copy_to_user((char __user *)arg + offsetof(struct ksu_get_app_profile_cmd, profile), profile,
+                         sizeof(struct app_profile))) {
+            pr_err("get_app_profile: copy_to_user failed\n");
+            ret = -EFAULT;
+        }
+        ksu_put_app_profile(profile);
+    }
+    return ret;
 }
 
 static int do_set_app_profile(void __user *arg)
@@ -403,7 +412,13 @@ static int do_get_feature(void __user *arg)
 
 
 	ret = ksu_get_feature(cmd.feature_id, &cmd.value, &supported);
-	cmd.supported = supported ? 1 : 0;
+	cmd.supported = 0;
+	if (supported) {
+		cmd.supported |= KSU_FEATURE_FLAG_SUPPORTED;
+		if (ksu_feature_is_forced(cmd.feature_id)) {
+			cmd.supported |= KSU_FEATURE_FLAG_FORCED;
+		}
+	}
 
 	if (ret && supported) {
 		pr_err("get_feature: failed for feature %u: %d\n", cmd.feature_id, ret);
@@ -891,13 +906,13 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .cmd = KSU_IOCTL_GET_APP_PROFILE,
         .name = "GET_APP_PROFILE",
         .handler = do_get_app_profile,
-        .perm_check = only_manager
+        .perm_check = manager_or_root
     },
     {
         .cmd = KSU_IOCTL_SET_APP_PROFILE,
         .name = "SET_APP_PROFILE",
         .handler = do_set_app_profile,
-        .perm_check = only_manager
+        .perm_check = manager_or_root
     },
     {
         .cmd = KSU_IOCTL_GET_FEATURE,
@@ -987,8 +1002,10 @@ long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void 
 	for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
 		if (cmd == ksu_ioctl_handlers[i].cmd) {
 			// Check permission first
-			if (ksu_ioctl_handlers[i].perm_check && !ksu_ioctl_handlers[i].perm_check() &&
-                !(ksu_ioctl_handlers[i].allow_su_session && ksu_is_su_session_fd(filp))) {
+			if (ksu_ioctl_handlers[i].perm_check &&
+			    !ksu_ioctl_handlers[i].perm_check() &&
+			    !(ksu_ioctl_handlers[i].allow_su_session &&
+			      ksu_is_su_session_fd(filp))) {
 				pr_warn("ksu ioctl: permission denied for cmd=0x%x uid=%d\n",
 					cmd, current_uid().val);
 				return -EPERM;
