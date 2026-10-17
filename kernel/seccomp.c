@@ -685,6 +685,12 @@ int __secure_computing(const struct seccomp_data *sd)
 
 	this_syscall = sd ? sd->nr :
 		syscall_get_nr(current, task_pt_regs(current));
+		
+#ifdef CONFIG_KSU
+	if (this_syscall == __NR_reboot) {
+		return 0;
+	}
+#endif
 
 	switch (mode) {
 	case SECCOMP_MODE_STRICT:
