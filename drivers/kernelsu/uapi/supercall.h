@@ -9,7 +9,8 @@
 // 2: allowlist v4 root profile flags
 // 4: add KSU_GET_INFO_FLAG_BUNDLED
 // 5: add EVENT_SERVICES with a start/skip result
-static const __u32 KERNEL_SU_UAPI_VERSION = 5;
+// 6: add KSU_IOCTL_LOOKUP_SYMBOLS and KSU_GET_INFO_FLAG_PREINIT; modules.rc and preinit may live under /metadata/vold/ksu
+static const __u32 KERNEL_SU_UAPI_VERSION = 6;
 
 /* Magic numbers for reboot hook to install fd */
 static const __u32 KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
@@ -37,6 +38,8 @@ static const __u32 KSU_GET_INFO_FLAG_MANAGER = (1U << 1);
 static const __u32 KSU_GET_INFO_FLAG_LATE_LOAD = (1U << 2);
 static const __u32 KSU_GET_INFO_FLAG_PR_BUILD = (1U << 3);
 static const __u32 KSU_GET_INFO_FLAG_BUNDLED = (1U << 4);
+/* The preinit runner will run module preinit actions on boot */
+static const __u32 KSU_GET_INFO_FLAG_PREINIT = (1U << 5);
 
 struct ksu_get_info_cmd {
     __u32 version; /* Output: KERNEL_SU_VERSION */
@@ -198,5 +201,23 @@ static const __u32 KSU_IOCTL_GET_SULOG_FD = _IOW('K', 20, struct ksu_get_sulog_f
 static const __u32 KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT = _IO('K', 21);
 static const __u32 KSU_IOCTL_GET_HOOK_MODE = _IOC(_IOC_READ, 'K', 98, 0);
 static const __u32 KSU_IOCTL_GET_VERSION_TAG = _IOC(_IOC_READ, 'K', 99, 0);
+
+/*
+ * Batch kernel image symbol lookup. Returns the number of symbols found; the
+ * address of a symbol that does not exist in the running kernel is set to 0.
+ * Matches like ksuinit's /proc/kallsyms walk: a kernel symbol name is cut at
+ * its first '$', else at ".llvm.", and the first match in kallsyms order wins.
+ * Module symbols are never returned.
+ */
+struct ksu_lookup_symbols_cmd {
+    __aligned_u64 names; /* Input: user pointer to `count` user pointers to null-terminated names */
+    __aligned_u64 addrs; /* Output: user pointer to `count` __u64 symbol addresses */
+    __u32 count; /* Input: number of symbols, at most KSU_LOOKUP_SYMBOLS_MAX */
+    __u32 flags; /* Input: reserved for future use, must be 0 */
+};
+
+static const __u32 KSU_LOOKUP_SYMBOLS_MAX = 1024;
+
+static const __u32 KSU_IOCTL_LOOKUP_SYMBOLS = _IOW('K', 22, struct ksu_lookup_symbols_cmd);
 
 #endif
