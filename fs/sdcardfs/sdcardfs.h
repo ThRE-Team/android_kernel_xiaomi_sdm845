@@ -73,6 +73,7 @@
 
 #define AID_PACKAGE_INFO  1027
 
+#define SDCARDFS_VERSION "Limitless 2.4"
 
 /*
  * Permissions are handled by our permission function.
