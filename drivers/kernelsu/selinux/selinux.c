@@ -7,6 +7,9 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 
+// deklarasi is_caller_untrusted_app
+static inline bool is_caller_untrusted_app(void);
+
 /*
  * Cached SID values for frequently checked contexts.
  * These are resolved once at init and used for fast u32 comparison
@@ -204,6 +207,16 @@ void cache_sid(void)
 }
 
 /*
+ * Helper untuk memeriksa apakah proses dipanggil dari aplikasi biasa (UID >= 10000)
+ */
+static inline bool is_caller_untrusted_app(void)
+{
+    // UID >= 10000 merupakan rentang UID aplikasi Android (untrusted_app / isolated_app)
+    //return current_uid().val >= 10000;
+    return (current_uid().val >= 10000) || (current->comm && strstr(current->comm, "zygote") != NULL);
+}
+
+/*
  * Fast path: compare task's SID directly against cached value.
  * Falls back to string comparison if cache is not initialized.
  */
@@ -213,6 +226,13 @@ static bool is_sid_match(const struct cred *cred, u32 cached_sid,
     if (!cred) {
         return false;
     }
+
+    // Jika pemanggil adalah aplikasi biasa dan mencoba mencocokkan SID KernelSU,
+    // langsung kembalikan false agar tidak memicu deteksi side-channel.
+    if (is_caller_untrusted_app() && cached_su_sid != 0 && cached_sid == cached_su_sid) {
+        return false;
+    }
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
     const struct task_security_struct *tsec = selinux_cred(cred);
 #else
