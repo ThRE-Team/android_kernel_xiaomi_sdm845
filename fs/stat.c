@@ -14,7 +14,7 @@
 #include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
-
+#include <linux/susfs.h>
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
@@ -37,6 +37,11 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 
 EXPORT_SYMBOL(generic_fillattr);
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+
 /**
  * vfs_getattr_nosec - getattr without security checks
  * @path: file to get attributes from
@@ -52,6 +57,17 @@ EXPORT_SYMBOL(generic_fillattr);
 int vfs_getattr_nosec(struct path *path, struct kstat *stat)
 {
 	struct inode *inode = d_backing_inode(path->dentry);
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	if (susfs_is_current_app_uid()) {
+		bool is_fuse = false;
+		if (susfs_is_inode_sus_kstat(inode, &is_fuse)) {
+			generic_fillattr(inode, stat);
+			susfs_sus_kstat_spoof_generic_fillattr(inode, stat, is_fuse ? STATX_SUS_KSTAT_FUSE : STATX_SUS_KSTAT);
+			return 0;
+		}
+	}
+#endif
 
 	if (inode->i_op->getattr)
 		return inode->i_op->getattr(path->mnt, path->dentry, stat);
