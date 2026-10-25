@@ -29,6 +29,11 @@
 #include "storm-watch.h"
 #include "schgm-flash.h"
 
+#ifdef CONFIG_LIMITLESS
+  #define USBIN_2500MA    2500000
+  #define USBIN_3000MA    3000000
+#endif
+
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
 		__func__, ##__VA_ARGS__)	\

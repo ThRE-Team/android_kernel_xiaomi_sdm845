@@ -2043,6 +2043,10 @@ static int smb2_init_hw(struct smb2 *chip)
 	/* vote 0mA on usb_icl for non battery platforms */
 	vote(chg->usb_icl_votable,
 		DEFAULT_VOTER, chip->dt.no_battery, 0);
+#ifdef CONFIG_LIMITLESS
+	vote(chg->usb_icl_votable,
+		"LIMITLESS_VOTER", true, 2800000);
+#endif
 	vote(chg->dc_suspend_votable,
 		DEFAULT_VOTER, chip->dt.no_battery, 0);
 	vote(chg->fcc_votable,
