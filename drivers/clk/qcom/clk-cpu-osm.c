@@ -73,6 +73,9 @@
 static DEFINE_VDD_REGS_INIT(vdd_l3_mx_ao, 1);
 static DEFINE_VDD_REGS_INIT(vdd_pwrcl_mx_ao, 1);
 
+#ifdef CONFIG_LIMITLESS
+#include "limitless.h"
+#else
 struct osm_entry {
 	u16 virtual_corner;
 	u16 open_loop_volt;
@@ -98,6 +101,7 @@ struct clk_osm {
 	u32 max_core_count;
 	u32 mx_turbo_freq;
 };
+#endif
 
 static bool is_sdm845v1;
 
@@ -521,12 +525,20 @@ static struct clk_osm cpu5_pwrcl_clk = {
 	},
 };
 
+#ifdef CONFIG_LIMITLESS
+struct clk_osm perfcl_clk = {
+	.cluster_num = 2,
+	.max_core_count = 4,
+	.hw.init = &osm_clks_init[2],
+};
+#else
 static struct clk_osm perfcl_clk = {
 	.cluster_num = 2,
 	.max_core_count = 4,
 	.hw.init = &osm_clks_init[2],
 };
 
+#endif
 
 static struct clk_osm cpu4_perfcl_clk = {
 	.core_num = 0,
