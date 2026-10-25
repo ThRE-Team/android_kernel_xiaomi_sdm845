@@ -74,7 +74,7 @@
 #define AID_PACKAGE_INFO  1027
 
 /* Limitless Addon Version */
-#define LIMITLESS_ADDON "R1.0"
+#define LIMITLESS_ADDON "R24"
 #define SDCARDFS_VERSION LIMITLESS_ADDON
 
 /*
