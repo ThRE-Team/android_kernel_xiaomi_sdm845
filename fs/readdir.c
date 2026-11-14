@@ -19,6 +19,12 @@
 #include <linux/syscalls.h>
 #include <linux/unistd.h>
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#include <linux/susfs_def.h>
+extern int susfs_get_data_path(struct path *path);
+extern bool susfs_is_inode_sus_path(struct inode *inode);
+#endif
+
 #include <asm/uaccess.h>
 #include <linux/next_hide.h>
 
