@@ -42,7 +42,9 @@
 #include "internal.h"
 #include "mount.h"
 
+#ifdef CONFIG_LIMITLESS
 #include <linux/next_hide.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/namei.h>

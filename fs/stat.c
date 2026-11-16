@@ -17,7 +17,9 @@
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
+#ifdef CONFIG_LIMITLESS
 #include <linux/next_hide.h>
+#endif
 
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {

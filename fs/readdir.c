@@ -20,7 +20,9 @@
 #include <linux/unistd.h>
 
 #include <asm/uaccess.h>
+#ifdef CONFIG_LIMITLESS
 #include <linux/next_hide.h>
+#endif
 
 int iterate_dir(struct file *file, struct dir_context *ctx)
 {
