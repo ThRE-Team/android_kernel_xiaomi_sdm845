@@ -1675,7 +1675,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 
 #ifdef CONFIG_KSU_MANUAL_HOOK
 __attribute__((hot))
-extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
 					void *argv, void *envp, int *flags);
 #endif
 
@@ -1697,7 +1697,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		return PTR_ERR(filename);
 
 #ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 #endif
 
 	/*
