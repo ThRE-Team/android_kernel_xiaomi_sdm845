@@ -582,6 +582,10 @@ error:
  * This function implements a generic ability to update ruid, euid,
  * and suid.  This allows you to implement the 4.4 compatible seteuid().
  */
+#ifdef CONFIG_KSU_MANUAL_HOOK
+extern int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid);
+#endif
+
 SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 {
 	struct user_namespace *ns = current_user_ns();
@@ -608,6 +612,10 @@ SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 		return -ENOMEM;
 
 	old = current_cred();
+
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_setresuid(old->uid.val, ruid);
+#endif
 
 	retval = -EPERM;
 	if (!ns_capable(old->user_ns, CAP_SETUID)) {

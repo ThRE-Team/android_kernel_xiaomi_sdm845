@@ -1673,6 +1673,12 @@ static int exec_binprm(struct linux_binprm *bprm)
 	return ret;
 }
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+__attribute__((hot))
+extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+					void *argv, void *envp, int *flags);
+#endif
+
 /*
  * sys_execve() executes a new program.
  */
@@ -1689,6 +1695,10 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
+
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+#endif
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
